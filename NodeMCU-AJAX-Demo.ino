@@ -102,7 +102,7 @@ void setup()
     WiFi.mode(WIFI_STA);        // Initialize Wi-Fi in STAtion mode. NodeMCU will act as Client.
     //WiFi.mode(WIFI_AP);       // Initialize Wi-Fi in AP mode. Node MCU will act as Access Point. So You can
                                 // to it directly. Address of AP is 192.168.4.1. No password. AP is open.
-    //WiFi.config(ip, mask, gw, dns); // Use static IP settings  
+    //WiFi.config(ip, gw, mask, dns); // Use static IP settings  
     WiFi.begin(SSID, PASSWORD); // Start connecting to AP with ssid and password
     Serial.print("Connecting Wi-Fi.");
     // Wait until connection succesfull
