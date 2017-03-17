@@ -39,28 +39,28 @@
 --------------------------------------------------------------*/
 
 #include <ESP8266WiFi.h>          // ESP8266 base Wi-Fi library 
-#include <ESP8266WebServer.h>           // Implementation of standatd Arduino network routines
+#include <ESP8266WebServer.h>     // WebServer library
 #include <FS.h>                   // SFIFFS local flash storge File system. Implements the same API as SD card library
 
 #define SSID "SSID"               // Wi-Fi Access point SSID
 #define PASSWORD "PASSWORD"       // Wi-Fi password
+#define INDEX "/index.htm"
 
 IPAddress ip(192, 168, 30, 129);  // IP address
 IPAddress mask(255, 255, 255, 0); // Netmask
 IPAddress gw(192, 168, 30, 4);    // Default gateway
 IPAddress dns(192, 168, 30, 4);   // DNS
-ESP8266WebServer server(80);            // create a server at port 80
+ESP8266WebServer server(80);      // create a server at port 80
 boolean LED_state[4] = {0};       // stores the states of the LEDs
-
 
 // checks if received HTTP request is switching on/off LEDs
 // also saves the state of the LEDs
 void SetLEDs(void)
 {
     // LED 1 (pin D4)
-    if (server.hasArg("LED1")) {
-        LED_state[0] = server.arg("LED1").toInt();       // save LED state
-        digitalWrite(D4, (LED_state[0]==1)?LOW:HIGH);    // For D4 and D0 use LOW output for 'on' state  
+    if (server.hasArg("LED1")) {                          // Checks if URL has argumen LED1 (LED1=1)
+        LED_state[0] = server.arg("LED1").toInt();        // save LED state. Converting argument value from stfing to integer
+        digitalWrite(D4, (LED_state[0]==1)?LOW:HIGH);     // For D4 and D0 use LOW output for 'on' state  
     }
     // LED 2 (pin D5)
     if (server.hasArg("LED2")) {
@@ -83,7 +83,7 @@ void SetLEDs(void)
 //  and LED status
 String xmlResponse()
 {
-    String res = "";
+    String res = "";                    // String to assemble XML response values
     int analog_val;                     // stores value read from analog inputs
     int sw_arr[] = {D1, D2, D3, D7, D8};// pins interfaced to switches
     
@@ -149,19 +149,22 @@ String xmlResponse()
     return res;
 }
 
+// callback function that is called by Web server in case if /ajax_input?LED=1&LED2=...
 void ajaxInputs() {
-  SetLEDs();
-  server.sendHeader("Connection", "close");
-  server.sendHeader("Cache-Control", "no-store, must-revalidate");
-  server.send(200, "text/xml", xmlResponse());
+  SetLEDs();      // Set LEDs
+  server.sendHeader("Connection", "close");                         // Headers to free connection ASAP and 
+  server.sendHeader("Cache-Control", "no-store, must-revalidate");  // Don't cache response
+  server.send(200, "text/xml", xmlResponse());                      // Send string from xmlResponse() as XML document to cliend.
+                                                                    // 200 - means Success html result code
 }
+// callback function that is called by Web server if no sutable callback function fot URL found
 void indexFile() {
-    server.sendHeader("Connection", "close");
-    server.sendHeader("Cache-Control", "no-store, must-revalidate");
-    server.sendHeader("Access-Control-Allow-Origin", "*");
-    File file = SPIFFS.open("/index.htm", "r");
-    size_t sent = server.streamFile(file, "text/html");
-    file.close();
+    server.sendHeader("Connection", "close");                       // Headers again free connection and
+    server.sendHeader("Cache-Control", "no-store, must-revalidate");// Don't chaching
+    server.sendHeader("Access-Control-Allow-Origin", "*");          // Helpful when page contains JavaScript code that performing outgoung requests
+    File file = SPIFFS.open(INDEX, "r");                            // Open default index file readonly
+    size_t sent = server.streamFile(file, "text/html");             // Send file to clent as HTML document
+    file.close();                                                   // Close file
 }
 
 void setup()
@@ -178,7 +181,7 @@ void setup()
     Serial.println("SUCCESS - File system initialized.");
     // check for /index.htm file
     // Note each file must begins with slash.
-    if (!SPIFFS.exists("/index.htm")) {
+    if (!SPIFFS.exists(INDEX)) {
         Serial.println("ERROR - Can't find /index.htm file!");
         return;                 // can't find index file
     }
@@ -200,9 +203,11 @@ void setup()
   
     //WiFi.mode(WIFI_AP);       // Initialize Wi-Fi in AP mode. Node MCU will act as Access Point. So You can
                                 // to it directly. Address of AP is 192.168.4.1. No password. AP is open.
+                                
     WiFi.mode(WIFI_STA);        // Initialize Wi-Fi in STAtion mode. NodeMCU will act as Wi-Fi Client.
     //WiFi.config(ip, gw, mask, dns); // Use static IP settings  
     WiFi.begin(SSID, PASSWORD); // Start connecting to AP with ssid and password
+
     Serial.print("Connecting Wi-Fi.");
     // Wait until connection succesfull
     while (WiFi.status() != WL_CONNECTED) {
@@ -214,6 +219,7 @@ void setup()
     Serial.println(WiFi.localIP());     // Prints IP address got
     // Set callback function to handle http requests with different URLs
     server.on("/ajax_inputs", HTTP_GET, ajaxInputs);  // call function ajaxInputs() if Web Server gets request http://192.168.1.20/ajax_inputs?LED1=0...
+    // You can add multiple server.on(url...) to handle different url by specific routines
     server.onNotFound(indexFile);       // call function indexFile() on any other requests
     server.begin();                     // start to listen for clients
 }
