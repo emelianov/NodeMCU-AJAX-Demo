@@ -1,8 +1,5 @@
 /*--------------------------------------------------------------
   NodeMCU AJAX Demo
-  Original code author is
-                W.A. Smith, http://startingelectronics.com
-  Program:      eth_websrv_SD_Ajax_in_out
 
   Description:  NodeMCU web server that displays analog input,
                 the state of 5 switches and controls 2 outputs
@@ -35,35 +32,137 @@
                   modified by Tom Igoe
                 - ESP8266/Arduino bundeled examples
                 
-  Date:         4 April 2013
-  Modified:     19 June 2013
-                - removed use of the String class
-                17 March 2017
-                - Rewrite to be used with NodeMCU
+  Date:         17 March 2017
  
-  Author:       W.A. Smith, http://startingelectronics.com
-  Modifed:      a.m.emelianov@gmail.com https://gitbub.com/emelianov
+  Author:       a.m.emelianov@gmail.com
+                https://gitbub.com/emelianov
 --------------------------------------------------------------*/
 
 #include <ESP8266WiFi.h>          // ESP8266 base Wi-Fi library 
-#include <WiFiClient.h>           // Implementation of standatd Arduino network routines
+#include <ESP8266WebServer.h>           // Implementation of standatd Arduino network routines
 #include <FS.h>                   // SFIFFS local flash storge File system. Implements the same API as SD card library
 
 #define SSID "SSID"               // Wi-Fi Access point SSID
 #define PASSWORD "PASSWORD"       // Wi-Fi password
 
-// size of buffer used to capture HTTP requests
-#define REQ_BUF_SZ   400
-
 IPAddress ip(192, 168, 30, 129);  // IP address
 IPAddress mask(255, 255, 255, 0); // Netmask
 IPAddress gw(192, 168, 30, 4);    // Default gateway
 IPAddress dns(192, 168, 30, 4);   // DNS
-WiFiServer server(80);            // create a server at port 80
-File webFile;                     // the web page file
-char HTTP_req[REQ_BUF_SZ] = {0};  // buffered HTTP request stored as null terminated string
-char req_index = 0;               // index into HTTP_req buffer
+ESP8266WebServer server(80);            // create a server at port 80
 boolean LED_state[4] = {0};       // stores the states of the LEDs
+
+
+// checks if received HTTP request is switching on/off LEDs
+// also saves the state of the LEDs
+void SetLEDs(void)
+{
+    // LED 1 (pin D4)
+    if (server.hasArg("LED1")) {
+        LED_state[0] = server.arg("LED1").toInt();       // save LED state
+        digitalWrite(D4, (LED_state[0]==1)?LOW:HIGH);    // For D4 and D0 use LOW output for 'on' state  
+    }
+    // LED 2 (pin D5)
+    if (server.hasArg("LED2")) {
+        LED_state[1] = server.arg("LED2").toInt();       // save LED state
+        digitalWrite(D5, (LED_state[1]==1)?HIGH:LOW);    // For D5 and D6 use HIGH output for 'on' state  
+    }
+    // LED 3 (pin D6)
+    if (server.hasArg("LED3")) {
+        LED_state[2] = server.arg("LED3").toInt();       // save LED state
+        digitalWrite(D6, (LED_state[2]==1)?HIGH:LOW);    // For D5 and D6 use HIGH output for 'on' state  
+    }
+    // LED 4 (pin D0)
+    if (server.hasArg("LED4")) {
+        LED_state[3] = server.arg("LED4").toInt();       // save LED state
+        digitalWrite(D0, (LED_state[3]==1)?LOW:HIGH);    // For D4 and D0 use LOW output for 'on' state  
+    }
+}
+
+// send the XML file with analog values, switch status
+//  and LED status
+String xmlResponse()
+{
+    String res = "";
+    int analog_val;                     // stores value read from analog inputs
+    int sw_arr[] = {D1, D2, D3, D7, D8};// pins interfaced to switches
+    
+    res += "<?xml version = \"1.0\" ?>\n";
+    res +="<inputs>\n";
+    // read analog input
+    // ESP8266 has only one Analog input. It's 10bit (1024 values) Measuring range is 0-1V.
+        analog_val = analogRead(A0);
+        res += "<analog>";
+        res += String(analog_val);
+        res += "</analog>\n";
+    // read switches
+    for (int count = 0; count < sizeof(sw_arr)/sizeof(sw_arr[0]); count++) {
+        res += "<switch>";
+        if (digitalRead(sw_arr[count])) {
+            res += "ON";
+        }
+        else {
+            res += "OFF";
+        }
+        res += "</switch>";
+    }
+    // checkbox LED states
+    // LED1
+    res += "<LED>";
+    if (LED_state[0]) {
+        res += "checked";
+    }
+    else {
+        res += "unchecked";
+    }
+    res += "</LED>\n";
+    // LED2
+    res += "<LED>";
+    if (LED_state[1]) {
+        res += "checked";
+    }
+    else {
+        res += "unchecked";
+    }
+     res += "</LED>\n";
+    // button LED states
+    // LED3
+    res += "<LED>";
+    if (LED_state[2]) {
+        res += "on";
+    }
+    else {
+        res += "off";
+    }
+    res += "</LED>\n";
+    // LED4
+    res += "<LED>";
+    if (LED_state[3]) {
+        res += "on";
+    }
+    else {
+        res += "off";
+    }
+    res += "</LED>\n";
+    
+    res += "</inputs>";
+    return res;
+}
+
+void ajaxInputs() {
+  SetLEDs();
+  server.sendHeader("Connection", "close");
+  server.sendHeader("Cache-Control", "no-store, must-revalidate");
+  server.send(200, "text/xml", xmlResponse());
+}
+void indexFile() {
+    server.sendHeader("Connection", "close");
+    server.sendHeader("Cache-Control", "no-store, must-revalidate");
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    File file = SPIFFS.open("/index.htm", "r");
+    size_t sent = server.streamFile(file, "text/html");
+    file.close();
+}
 
 void setup()
 {
@@ -91,7 +190,7 @@ void setup()
     pinMode(D7, INPUT);
     pinMode(D8, INPUT);         // Pull-Down
     // LEDs
-    pinMode(D4, OUTPUT);        // ESP8266 LED
+    pinMode(D4, OUTPUT);        // ESP-12 LED
     pinMode(D5, OUTPUT);
     pinMode(D6, OUTPUT);
     pinMode(D0, OUTPUT);        // NodeMCU LED
@@ -99,9 +198,9 @@ void setup()
     digitalWrite(D4, HIGH);
     digitalWrite(D0, HIGH);
   
-    WiFi.mode(WIFI_STA);        // Initialize Wi-Fi in STAtion mode. NodeMCU will act as Client.
     //WiFi.mode(WIFI_AP);       // Initialize Wi-Fi in AP mode. Node MCU will act as Access Point. So You can
                                 // to it directly. Address of AP is 192.168.4.1. No password. AP is open.
+    WiFi.mode(WIFI_STA);        // Initialize Wi-Fi in STAtion mode. NodeMCU will act as Wi-Fi Client.
     //WiFi.config(ip, gw, mask, dns); // Use static IP settings  
     WiFi.begin(SSID, PASSWORD); // Start connecting to AP with ssid and password
     Serial.print("Connecting Wi-Fi.");
@@ -113,229 +212,15 @@ void setup()
     Serial.println();
     Serial.print("SUCCESS - Local IP: ");
     Serial.println(WiFi.localIP());     // Prints IP address got
-    
-    server.begin();             // start to listen for clients
+    // Set callback function to handle http requests with different URLs
+    server.on("/ajax_inputs", HTTP_GET, ajaxInputs);  // call function ajaxInputs() if Web Server gets request http://192.168.1.20/ajax_inputs?LED1=0...
+    server.onNotFound(indexFile);       // call function indexFile() on any other requests
+    server.begin();                     // start to listen for clients
 }
 
 void loop()
 {
-    WiFiClient client = server.available();  // try to get client
-
-    if (client) {  // got client?
-        boolean currentLineIsBlank = true;
-        while (client.connected()) {
-            if (client.available()) {   // client data available to read
-                char c = client.read(); // read 1 byte (character) from client
-                // limit the size of the stored received HTTP request
-                // buffer first part of HTTP request in HTTP_req array (string)
-                // leave last element in array as 0 to null terminate string (REQ_BUF_SZ - 1)
-                if (req_index < (REQ_BUF_SZ - 1)) {
-                    HTTP_req[req_index] = c;          // save HTTP request character
-                    req_index++;
-                }
-                // last line of client request is blank and ends with \n
-                // respond to client only after last line received
-                if (c == '\n' && currentLineIsBlank) {
-                    // send a standard http response header
-                    client.println("HTTP/1.1 200 OK");
-                    // remainder of header follows below, depending on if
-                    // web page or XML page is requested
-                    // Ajax request - send XML file
-                    if (StrContains(HTTP_req, "ajax_inputs")) {
-                        // send rest of HTTP header
-                        client.println("Content-Type: text/xml");
-                        client.println("Connection: keep-alive");
-                        client.println();
-                        SetLEDs();
-                        // send XML file containing input states
-                        XML_response(client);
-                    }
-                    else {  // web page request
-                        // send rest of HTTP header
-                        client.println("Content-Type: text/html");
-                        client.println("Connection: close");
-                        // In original sketch was connection argument as below. But it's wrong.
-                        // client.println("Connection: keep-alive");
-                        client.println();
-                        // send web page
-                        // open web page file read only. Second parameter "r"/"w" is required for SPIFFS but can be skiped for SD.
-                        webFile = SPIFFS.open("/index.htm", "r");
-                        if (webFile) {
-                            while(webFile.available()) {
-                                client.write(webFile.read()); // send web page to client
-                            }
-                            webFile.close();
-                        }
-                        
-                    }
-                    // display received HTTP request on serial port
-                    Serial.print(HTTP_req);
-                    // reset buffer index and all buffer elements to 0
-                    req_index = 0;
-                    StrClear(HTTP_req, REQ_BUF_SZ);
-                    break;
-                }
-                // every line of text received from the client ends with \r\n
-                if (c == '\n') {
-                    // last character on line of received text
-                    // starting new line with next character read
-                    currentLineIsBlank = true;
-                } 
-                else if (c != '\r') {
-                    // a text character was received from client
-                    currentLineIsBlank = false;
-                }
-            } // end if (client.available())
-        } // end while (client.connected())
-        delay(1);      // give the web browser time to receive the data
-        client.stop(); // close the connection
-    } // end if (client)
+    server.handleClient();              // Checks if incoming client connection, get data and query callback function corresponding to request URL
+    delay(100);                         // Lets ESP networking routines to work. 
 }
 
-// checks if received HTTP request is switching on/off LEDs
-// also saves the state of the LEDs
-void SetLEDs(void)
-{
-    // LED 1 (pin D4)
-    if (StrContains(HTTP_req, "LED1=1")) {
-        LED_state[0] = 1;       // save LED state
-        digitalWrite(D4, LOW);  // For D4 and D0 use LOW output for 'on' state  
-    }
-    else if (StrContains(HTTP_req, "LED1=0")) {
-        LED_state[0] = 0;       // save LED state
-        digitalWrite(D4, HIGH); // and HIGH for 'off' state
-    }
-    // LED 2 (pin D5)
-    if (StrContains(HTTP_req, "LED2=1")) {
-        LED_state[1] = 1;       // save LED state
-        digitalWrite(D5, HIGH);
-    }
-    else if (StrContains(HTTP_req, "LED2=0")) {
-        LED_state[1] = 0;       // save LED state
-        digitalWrite(D5, LOW);
-    }
-    // LED 3 (pin D6)
-    if (StrContains(HTTP_req, "LED3=1")) {
-        LED_state[2] = 1;       // save LED state
-        digitalWrite(D6, HIGH);
-    }
-    else if (StrContains(HTTP_req, "LED3=0")) {
-        LED_state[2] = 0;       // save LED state
-        digitalWrite(D6, LOW);
-    }
-    // LED 4 (pin D0)
-    if (StrContains(HTTP_req, "LED4=1")) {
-        LED_state[3] = 1;       // save LED state
-        digitalWrite(D0, LOW);
-    }
-    else if (StrContains(HTTP_req, "LED4=0")) {
-        LED_state[3] = 0;       // save LED state
-        digitalWrite(D0, HIGH);
-    }
-}
-
-// send the XML file with analog values, switch status
-//  and LED status
-void XML_response(WiFiClient cl)
-{
-    int analog_val;                     // stores value read from analog inputs
-    int sw_arr[] = {D1, D2, D3, D7, D8};// pins interfaced to switches
-    
-    cl.print("<?xml version = \"1.0\" ?>");
-    cl.print("<inputs>");
-    // read analog input
-    // ESP8266 has only one Analog input. It's 10bit (1024 values) Measuring range is 0-1V.
-        analog_val = analogRead(A0);
-        cl.print("<analog>");
-        cl.print(analog_val);
-        cl.println("</analog>");
-    // read switches
-    for (int count = 0; count < sizeof(sw_arr)/sizeof(sw_arr[0]); count++) {
-        cl.print("<switch>");
-        if (digitalRead(sw_arr[count])) {
-            cl.print("ON");
-        }
-        else {
-            cl.print("OFF");
-        }
-        cl.println("</switch>");
-    }
-    // checkbox LED states
-    // LED1
-    cl.print("<LED>");
-    if (LED_state[0]) {
-        cl.print("checked");
-    }
-    else {
-        cl.print("unchecked");
-    }
-    cl.println("</LED>");
-    // LED2
-    cl.print("<LED>");
-    if (LED_state[1]) {
-        cl.print("checked");
-    }
-    else {
-        cl.print("unchecked");
-    }
-     cl.println("</LED>");
-    // button LED states
-    // LED3
-    cl.print("<LED>");
-    if (LED_state[2]) {
-        cl.print("on");
-    }
-    else {
-        cl.print("off");
-    }
-    cl.println("</LED>");
-    // LED4
-    cl.print("<LED>");
-    if (LED_state[3]) {
-        cl.print("on");
-    }
-    else {
-        cl.print("off");
-    }
-    cl.println("</LED>");
-    
-    cl.print("</inputs>");
-}
-
-// sets every element of str to 0 (clears array)
-void StrClear(char *str, char length)
-{
-    for (int i = 0; i < length; i++) {
-        str[i] = 0;
-    }
-}
-
-// searches for the string sfind in the string str
-// returns 1 if string found
-// returns 0 if string not found
-char StrContains(char *str, char *sfind)
-{
-    char found = 0;
-    char index = 0;
-    char len;
-
-    len = strlen(str);
-    
-    if (strlen(sfind) > len) {
-        return 0;
-    }
-    while (index < len) {
-        if (str[index] == sfind[found]) {
-            found++;
-            if (strlen(sfind) == found) {
-                return 1;
-            }
-        }
-        else {
-            found = 0;
-        }
-        index++;
-    }
-
-    return 0;
-}

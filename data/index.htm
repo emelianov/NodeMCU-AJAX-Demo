@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
     <head>
-        <title>Arduino Ajax I/O</title>
+        <title>ESP8266 Ajax I/O</title>
         <script>
 		strLED1 = "";
 		strLED2 = "";
@@ -69,7 +69,7 @@
 				}
 			}
 			// send HTTP GET request with LEDs to switch on/off if any
-			request.open("GET", "ajax_inputs" + strLED1 + strLED2 + strLED3 + strLED4 + nocache, true);
+			request.open("GET", "ajax_inputs?" + strLED1 + strLED2 + strLED3 + strLED4 + nocache, true);
 			request.send(null);
 			setTimeout('GetArduinoIO()', 1000);
 			strLED1 = "";
@@ -155,7 +155,7 @@
 			<p class="small_text">D0: NodeMCU LED</p>
 			<p>Switch 1 (D1): <span class="switches">...</span></p>
 			<p>Switch 2 (D2): <span class="switches">...</span></p>
-			<p>Switch 3 (D3): <span class="switches">...</span></p>
+			<p>Switch 3 (D3) FLASH&nbsp;button: <span class="switches">...</span></p>
 			<p class="small_text">D4: ESP8266 LED</p>
 			<p class="small_text">D5</p>
 			<p class="small_text">D6</p>
